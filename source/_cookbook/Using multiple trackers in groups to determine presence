@@ -1,0 +1,113 @@
+(1) Set up an MQTT broker.
+(2) Set up Owntracks on your phone.
+(3) Edit configuration.yaml for Owntracks, discovery, and Nmap:
+
+```yaml
+device_tracker:
+  - platform: owntracks
+    track_new_devices: yes
+    consider_home: 0:03
+    waypoints: True
+    waypoint_whitelist:
+      - user1
+      - user2
+      - user3
+  - platform: nmap_tracker
+    hosts:
+      - 192.168.1.3
+      - 192.168.1.8
+      - 192.168.1.83
+      # Highly recommended: assign IP address for devices you want to track so you can know where to find them. The three IP addresses above are examples for three mobile devices.
+    home_interval: 10
+    interval_seconds: 30
+
+mqtt:
+  broker: [input your value here]
+  port: [input your value here]
+  client_id: [input your value here]
+  username: [input your value here]
+  password: [input your value here]
+```
+
+Home Assistant will create and populate a known_devices.yaml based on discovery that you can edit as apporpriate. Example entries for user1's phone:
+
+```known_devices
+user1_owntracks:
+  hide_if_away: false
+  mac: 
+  name: User 1 Owntracks
+  picture: /local/user1_headshot.png
+  track: true
+  vendor: 
+
+user1_nmap:
+  name: User 1 Nmap
+  mac: [input your value here]
+  picture: https://home-assistant.io/images/favicon-192x192.png
+  track: true
+  hide_if_away: no
+```
+
+Note: Other examples suggest combining the device's MAC address with Owntracks. Leaving trackers separate in known_devices and then creating a group of trackers for each device allows the trackers to individually contribute to the device's location. If just one tracker reports that it is home, then HA will regard the device as being at home.
+
+(4) Edit configuration.yaml to refer to groups.yaml and automations.yaml:
+
+```yaml
+group: !include groups.yaml
+automation: !include automations.yaml
+```
+
+(5) Create a groups.yaml file and in it list the trackers for each user:
+
+```groups
+user1: device_tracker.user1_owntracks, device_tracker.user1_nmap
+user2: device_tracker.user2_owntracks, device_tracker.user2_nmap
+user3: device_tracker.user3_owntracks, device_tracker.user3_nmap
+```
+
+(6) Configure your iBeacons:
+
+One or more iBeacons can be used with Owntracks to help 'anchor' your Home location. More info is available [here](https://home-assistant.io/blog/2016/04/30/ibeacons-part-1-making-presence-detection-work-better/). Power on your iBeacons, configure them as instructed by the manufacturer, and then add a zone for each iBeacon in Owntracks. 
+
+(7) Create automation based on a user's presence. This example toggles a light when User 1 is home/away: 
+
+```automations
+  - alias: User 1 is away
+    trigger:
+      platform: state
+      entity_id: group.user1
+      to: 'not_home'
+    action:
+      - service: homeassistant.turn_off
+        entity_id: light.user1_presence
+
+  - alias: User 1 is home
+    trigger:
+      platform: state
+      entity_id: group.user1
+      to: 'home'
+    action:
+      - service: homeassistant.turn_on
+        entity_id: light.user1_presence
+```
+
+(8) Create automation based on the group's presence. This example toggles a light when all users are home/away: 
+
+```automations
+  - alias: Group is away
+    trigger:
+      platform: state
+      entity_id: group.all_devices
+      to: 'not_home'
+    action:
+      - service: homeassistant.turn_off
+        entity_id: light.group_presence
+
+  - alias: Group is home
+    trigger:
+      platform: state
+      entity_id: group.all_devices
+      to: 'home'
+    action:
+      - service: homeassistant.turn_on
+        entity_id: light.group_presence
